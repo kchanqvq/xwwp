@@ -182,8 +182,7 @@ Interactively, URL defaults to the string looking like a url around point."
   (when (stringp url)
     (if new-session
         (xwidget-webkit-new-session url)
-      (progn (xwidget-webkit-goto-url url)
-             (switch-to-buffer-other-window (xwidget-buffer (xwidget-webkit-current-session)))))))
+      (xwidget-webkit-goto-url url))))
 
 ;;; Adapted from EWW code to provide a DWIM style XWWP command
 (require 'eww)

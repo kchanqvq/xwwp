@@ -42,15 +42,12 @@ window.__xwidget_plus_section_candidates.forEach((h, id) => {
 
 (xwwp-js-def section fetch ()
   "Fetch all visible, non empty titles from the current page.""
-var r = {};
-window.__xwidget_plus_section_candidates = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6'));
-window.__xwidget_plus_section_candidates.forEach((h, id) => {
-    if (h.offsetWidth || h.offsetHeight || h.getClientRects().length) {
-        if (h.innerText.match(/\\S/))
-            r[id] = [h.innerText, h.innerText];
-    }
-});
-return r;
+window.__xwidget_plus_section_candidates =
+Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6')).filter((h) =>
+  (h.offsetWidth || h.offsetHeight || h.getClientRects().length) && h.innerText.match(/\\S/)).sort((a,b) =>
+    a.getClientRects().top - b.getClientRects().top);
+console.log(window.__xwidget_plus_section_candidates);
+return window.__xwidget_plus_section_candidates.map((h) => [h.innerText, h.innerText]);
 ")
 (xwwp-js-def section action (link-id)
   "Select the title identified by LINK-ID""
@@ -80,16 +77,18 @@ window.__xwidget_plus_section_candidates = null;
     (setq xwwp--section-titles titles)
     (unwind-protect
         (xwwp-section-action
+         xwidget
          (cadr
           (assoc
            (completing-read "Section: "
                             (lambda (string pred action)
                               (add-hook 'post-command-hook 'xwwp--section-update nil t)
-                              (xwwp--section-update)
                               (pcase action
-                                ('metadata '(metadata))
-                                ('t (setq xwwp--section-candidates
-                                          (complete-with-action action titles string pred)))
+                                ('metadata '(metadata (display-sort-function . identity)))
+                                ('t (prog1
+                                        (setq xwwp--section-candidates
+                                              (complete-with-action action titles string pred))
+                                      (xwwp--section-update)))
                                 (_ (complete-with-action action titles string pred)))))
            titles)))
       (xwwp-section-cleanup xwidget)

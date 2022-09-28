@@ -102,11 +102,10 @@ return r;
 
 (defun xwwp-follow-link-prepare-links (links)
   "Prepare the alist of LINKS."
-  (seq-sort-by (lambda (v) (cadr v)) #'<
-               (seq-map (lambda (v) (list (xwwp-follow-link-format-link (aref (cdr v) 0))
-                                          (string-to-number (car v))
-                                          (aref (cdr v) 1)))
-                        links)))
+  (seq-map-indexed
+   (lambda (v id) (list (xwwp-follow-link-format-link (aref v 0))
+                        id (aref v 1)))
+   links))
 
 (defvar xwwp--follow-link-candidates nil "Currently selected candidates.")
 (defvar xwwp--follow-link-links nil "Alist of LINKS.")
@@ -118,7 +117,6 @@ return r;
 (defun xwwp-follow-link-callback (links)
   "Ask for a link belonging to the alist LINKS.
 LINKS maps a numerical ID to an array of form [link-text, link-uri]"
-  (message "%S" links)
   (let* ((xwidget (xwidget-webkit-current-session))
          (links (xwwp-follow-link-prepare-links links)))
     (setq xwwp--follow-link-links links)
@@ -130,11 +128,12 @@ LINKS maps a numerical ID to an array of form [link-text, link-uri]"
            (completing-read "Link: "
                             (lambda (string pred action)
                               (add-hook 'post-command-hook 'xwwp--follow-link-update nil t)
-                              (xwwp--follow-link-update)
                               (pcase action
                                 ('metadata '(metadata))
-                                ('t (setq xwwp--follow-link-candidates
-                                          (complete-with-action action links string pred)))
+                                ('t (prog1
+                                        (setq xwwp--follow-link-candidates
+                                              (complete-with-action action links string pred))
+                                      (xwwp--follow-link-update)))
                                 (_ (complete-with-action action links string pred)))))
            links)))
       (t (xwwp-follow-link-cleanup xwidget)))

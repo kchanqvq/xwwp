@@ -152,6 +152,8 @@
         (when xwwp-history-ctable-component
           (ctbl:cp-update xwwp-history-ctable-component))))))
 (advice-add 'xwidget-webkit-callback :after #'xwwp-history-xwidget-event-callback)
+(defun xwwp-history-unload-function ()
+  (advice-remove 'xwidget-webkit-callback #'xwwp-history-xwidget-event-callback))
 
 (defgroup xwwp-history nil
   "`xwidget-webkit' history customizations."
