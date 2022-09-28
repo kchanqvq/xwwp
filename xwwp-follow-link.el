@@ -113,21 +113,25 @@ return r;
 LINKS maps a numerical ID to an array of form [link-text, link-uri]"
   (let* ((xwidget (xwidget-webkit-current-session))
          (links (xwwp-follow-link-prepare-links links)))
+    (message "%S" links)
     (condition-case nil
         (xwwp-follow-link-action
          xwidget
-         (completing-read "Link: " links
-                          (lambda (string pred action)
-                            (xwwp-follow-link-update xwidget)
-                            (pcase action
-                              ('metadata nil)
-                              ('t
-                               (let ((candidates (complete-with-action t links string pred)))
-                                 (xwwp-follow-link-highlight xwidget candidates nil)))
-                              (t (complete-with-action action links string pred)))
-                            (if (eq action 'metadata)
-                                nil
-                              (complete-with-action action links string pred)))))
+         (cadr
+          (assoc
+           (completing-read "Link: "
+                            (lambda (string pred action)
+                              (pcase action
+                                ('metadata '(metadata))
+                                ('t
+                                 (let ((candidates (complete-with-action t links string pred)))
+                                   (xwwp-follow-link-highlight
+                                    xwidget
+                                    (mapcar (lambda (cand) (cadr (assoc cand links))) candidates)
+                                    nil)
+                                   candidates))
+                                (_ (complete-with-action action links string pred)))))
+           links)))
       (t (xwwp-follow-link-cleanup xwidget)))))
 
 ;;;###autoload

@@ -156,33 +156,6 @@
 (defgroup xwwp-history nil
   "`xwidget-webkit' history customizations."
   :group 'xwwp)
-(defun xwwp-history-completing-read (prompt default)
-  ""
-  (cond
-   ((eq xwwp-follow-link-completion-system 'default)
-    (completing-read prompt xwwp-history-completion-list nil nil default))
-   ((eq xwwp-follow-link-completion-system 'helm)
-    (helm :sources
-          (helm-make-source "Xwidget Plus"  'helm-source-sync
-            :candidates xwwp-history-completion-list
-            :filtered-candidate-transformer
-            '(helm-cr-default-transformer))
-          :prompt prompt
-          :default default
-          :truncate-lines t))
-   ((eq xwwp-follow-link-completion-system 'ivy)
-    (let (result)
-      (ivy-read prompt xwwp-history-completion-list
-                :initial-input default
-                :action (lambda (v)
-                          (setq result (if (consp v) (cdr v) v))))
-      result))
-   ((eq xwwp-follow-link-completion-system 'ido)
-    (let* ((result (ido-completing-read prompt xwwp-history-completion-list nil nil default))
-           (url-start (next-property-change 0 result)))
-      (if url-start
-          (substring result url-start (1- (length result)))
-        result)))))
 (defvar xwwp-history-key-map (make-sparse-keymap))
 (define-key xwwp-history-key-map (kbd "RET")
   (lambda ()

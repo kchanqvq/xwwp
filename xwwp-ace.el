@@ -136,6 +136,43 @@ else if (updated_candidates.length == 1){
 else {
   return -1;
 }")
+(defun xwwp-webkit-insert-string ()
+  "Insert string into the active field in the current webkit widget.
+
+This improves `xwidget-webkit-insert-string': it doesn't
+generates JS error when there's no active input element, and it
+generates a submit event when the `last-command-event' is
+`RET'. If you don't wish to submit, use `C-j'."
+  ;; Read out the string in the field first and provide for edit.
+  (interactive nil xwidget-webkit-mode)
+  ;; As the prompt differs on JavaScript execution results,
+  ;; the function must handle the prompt itself.
+  (let ((xww (xwidget-webkit-current-session)))
+    (xwidget-webkit-execute-script
+     xww
+     (concat xwidget-webkit-activeelement-js "
+(function () {
+  var res = findactiveelement(document);
+  if (res)
+    return [res.value, res.type];
+})();")
+     (lambda (field)
+       "Prompt a string for the FIELD and insert in the active input."
+       (let ((str (pcase field
+                    (`[,val "text"]
+                     (read-string "Text: " val))
+                    (`[,val "password"]
+                     (read-passwd "Password: " nil val))
+                    (`[,val "textarea"]
+                     (xwidget-webkit-begin-edit-textarea xww val)))))
+         (when str
+           (xwidget-webkit-execute-script
+            xww
+            (concat "findactiveelement(document).value='" str "';"
+                    (if (eq last-command-event 13)
+                        "findactiveelement(document).form.submit();"
+                      "")))))))))
+
 (defun xwwp-ace-read-key-command (action)
   "Read a key to narrow down selection.
 ACTION is passed from JavaScript side, to indicate
@@ -144,14 +181,19 @@ the effect of last key stroke.
 -1 means it does not match any candidates,
 and 1 means one unique candidate has been selected and clicked."
   (let ((xwidget (xwidget-webkit-current-session)))
-    (cond ((= action 0)
-           (let ((next-key (read-key "Enter prefix of the candidate labels to narrow down selection")))
-             (if (= next-key 7)
-                 (xwwp-ace-cleanup xwidget)
-               (xwwp-ace-read-key xwidget next-key #'xwwp-ace-read-key-command))))
-          ((= action -1)
-           (message "No candidate matching the prefix. Type C-g to quit.")
-           (xwwp-ace-read-key-command 0)))))
+    (pcase action
+      (0 (let ((next-key (read-key "Enter prefix of the candidate labels to narrow down selection")))
+           (if (= next-key 7)
+               (xwwp-ace-cleanup xwidget)
+             (xwwp-ace-read-key xwidget next-key #'xwwp-ace-read-key-command))))
+      (-1 (message "No candidate matching the prefix. Type C-g to quit.")
+          (xwwp-ace-read-key-command 0))
+      (1 (xwidget-webkit-execute-script
+          xwidget "findactiveelement(document) && findactiveelement(document).type"
+          (lambda (type)
+            (pcase type
+              ((or "text" "password" "textarea")
+               (xwwp-webkit-insert-string)))))))))
 (defun xwwp-ace-toggle-callback (length)
   "Callback for JavaScript function xwwp-ace-highlight.
 LENGTH is the number of highlighted candidates."

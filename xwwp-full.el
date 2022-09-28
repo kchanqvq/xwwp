@@ -38,7 +38,6 @@
 (require 'xwwp-ace)
 (require 'xwwp-section)
 (require 'xwwp-reader)
-(require 'xwwp-yank)
 
 (provide 'xwwp-full)
 ;;; xwwp-full.el ends here

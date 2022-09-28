@@ -182,7 +182,8 @@ the default Webkit buffer."
   (interactive
    (let ((prompt "Enter URL or keywords: "))
      (list (if (require 'xwwp-history nil t)
-               (xwwp-history-completing-read prompt "")
+               (let ((cand (completing-read prompt xwwp-history-completion-list)))
+                 (cdr (assoc cand xwwp-history-completion-list)))
              (read-string prompt nil 'eww-prompt-history ""))
            (prefix-numeric-value current-prefix-arg))))
   (when url
@@ -203,20 +204,6 @@ the default Webkit buffer."
           (setf (url-filename parsed) (substring (url-filename parsed) 3))))
       (setq url (url-recreate-url parsed))))
   (xwwp-browse-url-other-window url (eq arg 4)))
-
-
-;; Local Variables:
-;; eval: (mmm-mode)
-;; eval: (mmm-add-group 'elisp-js '((elisp-rawjs :submode js-mode
-;;                                               :face mmm-code-submode-face
-;;                                               :delimiter-mode nil
-;;                                               :front "xwwp--js \"" :back "\" js--")
-;;                                  (elisp-defjs :submode js-mode
-;;                                               :face mmm-code-submode-face
-;;                                               :delimiter-mode nil
-;;                                               :front "xwwp-defjs .*\n.*\"\"\n" :back "\")\n")))
-;; mmm-classes: elisp-js
-;; End:
 
 (provide 'xwwp)
 ;;; xwwp.el ends here
