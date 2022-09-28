@@ -85,7 +85,7 @@ var r = {};
 window.__xwidget_plus_follow_link_candidates = Array.from(document.querySelectorAll('a'));
 window.__xwidget_plus_follow_link_candidates.forEach((a, i) => {
     if (a.offsetWidth || a.offsetHeight || a.getClientRects().length) {
-        if (a.innerText.match(/\\\\S/))
+        if (a.innerText.match(/\\S/))
             r[i] = [a.innerText, a.href];
     }
 });
@@ -108,12 +108,20 @@ return r;
                                           (aref (cdr v) 1)))
                         links)))
 
+(defvar xwwp--follow-link-candidates nil "Currently selected candidates.")
+(defvar xwwp--follow-link-links nil "Alist of LINKS.")
+(defun xwwp--follow-link-update ()
+  (xwwp-follow-link-highlight
+   (xwidget-webkit-current-session)
+   (mapcar (lambda (cand) (cadr (assoc cand xwwp--follow-link-links))) xwwp--follow-link-candidates)
+   (cadr (assoc (run-hook-with-args-until-success 'xwwp--completion-candidate-hook) xwwp--follow-link-links))))
 (defun xwwp-follow-link-callback (links)
   "Ask for a link belonging to the alist LINKS.
 LINKS maps a numerical ID to an array of form [link-text, link-uri]"
+  (message "%S" links)
   (let* ((xwidget (xwidget-webkit-current-session))
          (links (xwwp-follow-link-prepare-links links)))
-    (message "%S" links)
+    (setq xwwp--follow-link-links links)
     (condition-case nil
         (xwwp-follow-link-action
          xwidget
@@ -121,18 +129,16 @@ LINKS maps a numerical ID to an array of form [link-text, link-uri]"
           (assoc
            (completing-read "Link: "
                             (lambda (string pred action)
+                              (add-hook 'post-command-hook 'xwwp--follow-link-update nil t)
+                              (xwwp--follow-link-update)
                               (pcase action
                                 ('metadata '(metadata))
-                                ('t
-                                 (let ((candidates (complete-with-action t links string pred)))
-                                   (xwwp-follow-link-highlight
-                                    xwidget
-                                    (mapcar (lambda (cand) (cadr (assoc cand links))) candidates)
-                                    nil)
-                                   candidates))
+                                ('t (setq xwwp--follow-link-candidates
+                                          (complete-with-action action links string pred)))
                                 (_ (complete-with-action action links string pred)))))
            links)))
-      (t (xwwp-follow-link-cleanup xwidget)))))
+      (t (xwwp-follow-link-cleanup xwidget)))
+    (setq xwwp--follow-link-links nil xwwp--follow-link-candidates nil)))
 
 ;;;###autoload
 (defun xwwp-follow-link (&optional xwidget)

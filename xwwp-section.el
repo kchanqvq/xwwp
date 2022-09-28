@@ -46,8 +46,8 @@ var r = {};
 window.__xwidget_plus_section_candidates = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6'));
 window.__xwidget_plus_section_candidates.forEach((h, id) => {
     if (h.offsetWidth || h.offsetHeight || h.getClientRects().length) {
-        if (h.innerText.match(/\\\\S/))
-            r[id] = h.innerText;
+        if (h.innerText.match(/\\S/))
+            r[id] = [h.innerText, h.innerText];
     }
 });
 return r;
@@ -65,31 +65,39 @@ window.__xwidget_plus_section_candidates.forEach(a => {
 window.__xwidget_plus_section_candidates = null;
 ")
 
-(defun xwwp-section-update (xwidget)
-  "Highligh TITLES in XWIDGET buffer when updating candidates."
-  (let ((titles (xwwp-follow-link-candidates xwwp-follow-link-completion-backend-instance)))
-    (when titles
-      (let* ((selected (car titles))
-             (candidates (cdr titles)))
-        (xwwp-section-highlight xwidget candidates selected)))))
+(defvar xwwp--section-candidates nil "Currently selected candidates.")
+(defvar xwwp--section-titles nil "Alist of TITLES.")
+(defun xwwp--section-update ()
+  (xwwp-section-highlight
+   (xwidget-webkit-current-session)
+   (mapcar (lambda (cand) (cadr (assoc cand xwwp--section-titles))) xwwp--section-candidates)
+   (cadr (assoc (run-hook-with-args-until-success 'xwwp--completion-candidate-hook) xwwp--section-titles))))
 
 (defun xwwp-section-callback (titles)
   "Ask for a TITLE belonging to the alist TITLES."
   (let* ((xwidget (xwidget-webkit-current-session))
          (titles (xwwp-follow-link-prepare-links titles)))
-    (oset xwwp-follow-link-completion-backend-instance collection titles)
+    (setq xwwp--section-titles titles)
     (unwind-protect
-        (xwwp-follow-link-read xwwp-follow-link-completion-backend-instance
-                               "Section: " titles
-                               (apply-partially #'xwwp-section-action xwidget)
-                               (apply-partially #'xwwp-section-update xwidget))
-      (xwwp-section-cleanup xwidget))
-    (oset xwwp-follow-link-completion-backend-instance collection nil)))
+        (xwwp-section-action
+         (cadr
+          (assoc
+           (completing-read "Section: "
+                            (lambda (string pred action)
+                              (add-hook 'post-command-hook 'xwwp--section-update nil t)
+                              (xwwp--section-update)
+                              (pcase action
+                                ('metadata '(metadata))
+                                ('t (setq xwwp--section-candidates
+                                          (complete-with-action action titles string pred)))
+                                (_ (complete-with-action action titles string pred)))))
+           titles)))
+      (xwwp-section-cleanup xwidget)
+      (setq xwwp--section-titles nil xwwp--section-candidates nil))))
 
 (defun xwwp-section (&optional xwidget)
   "Ask for a title in the XWIDGET session or the current one and select it."
   (interactive)
-  (setq xwwp-follow-link-completion-backend-instance (funcall (xwwp-follow-link-make-backend)))
   (let ((xwidget (or xwidget (xwidget-webkit-current-session))))
     (xwwp-html-inject-style xwidget "__xwidget_plus_follow_link_style" (xwwp-follow-link-style-definition))
     (xwwp-js-inject xwidget 'section)

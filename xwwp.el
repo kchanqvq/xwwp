@@ -81,10 +81,6 @@ null;
 " js-- id tag type content)))
     (xwidget-webkit-execute-script xwidget script)))
 
-(defun xwwp-html-inject-script (xwidget id script)
-  "Inject javascript SCRIPT in XWIDGET session using a script element with ID."
-  (xwwp-html-inject-head-element xwidget "script" id "text/javascript" script))
-
 (defun xwwp-html-inject-style (xwidget id style)
   "Inject css STYLE in XWIDGET session using a style element with ID."
   (xwwp-html-inject-head-element xwidget "style" id "text/css" style))
@@ -139,11 +135,37 @@ and a Lisp function to call it."
          (lisp-store `(xwwp-js-register-function (quote ,namespace) (quote ,name) ,script)))
     `(progn ,lisp-def ,lisp-store)))
 
+;; This simplified version require the script to be idempotent.
+;; (It always execute the script)
 (defun xwwp-js-inject (xwidget ns-name)
   "Inject the functions defined in NS-NAME into XWIDGET session."
   (let* ((namespace (assoc ns-name xwwp-js-scripts))
          (script (mapconcat #'cdr (cdr namespace) "\n")))
-    (xwwp-html-inject-script xwidget (format "--xwwp-%s" (symbol-name ns-name)) script)))
+    (xwidget-webkit-execute-script xwidget script)))
+
+;;; Completion systems
+
+(defun xwwp-vertico--candidate ()
+  (when (and (featurep 'vertico) vertico-mode)
+    (and vertico--input vertico--index (vertico--candidate 'highlight))))
+
+;; copied from `consult'
+(defun xwwp--default-completion-minibuffer-candidate ()
+  (let ((content (minibuffer-contents-no-properties)))
+    ;; When the current minibuffer content matches a candidate, return it!
+    (if (test-completion content
+                         minibuffer-completion-table
+                         minibuffer-completion-predicate)
+        content
+      ;; Return the full first candidate of the sorted completion list.
+      (when-let ((completions (completion-all-sorted-completions)))
+        (concat
+         (substring content 0 (or (cdr (last completions)) 0))
+         (car completions))))))
+
+(defvar xwwp--completion-candidate-hook
+  (list #'xwwp-vertico--candidate #'xwwp--default-completion-minibuffer-candidate)
+  "Get candidate from completion system.")
 
 ;;;###autoload
 (defun xwwp-browse-url-other-window (url &optional new-session)

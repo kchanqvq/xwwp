@@ -202,19 +202,13 @@ LENGTH is the number of highlighted candidates."
       (xwwp-ace-read-key-command 0)
     (message "No candidate for xwwp-ace.")))
 
-(defun xwwp-js-execute (xwidget ns-name)
-  "Inject the functions defined in NS-NAME into XWIDGET session."
-  (let* ((namespace (assoc ns-name xwwp-js-scripts))
-         (script (mapconcat #'cdr (cdr namespace) "\n")))
-    (xwidget-webkit-execute-script xwidget script)))
-
 (defun xwwp-ace-toggle ()
   "Start an xwwp-ace jump."
   (interactive)
   (let ((xwidget (xwidget-webkit-current-session)))
     (xwwp-ace-cleanup xwidget)
     (xwwp-html-inject-style xwidget "__xwidget_plus_ace_style" (xwwp-ace-style-definition))
-    (xwwp-js-execute xwidget 'ace)
+    (xwwp-js-inject xwidget 'ace)
     (xwwp-ace-highlight xwidget #'xwwp-ace-toggle-callback)))
 
 (provide 'xwwp-ace)
