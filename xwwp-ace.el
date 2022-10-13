@@ -1,6 +1,6 @@
 ;;; xwwp-ace.el --- Ace-jump style navigation in `xwidget-webkit' sessions -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2020 Q. Hong <qhong@mit.edu>
+;; Copyright (C) 2020-2022 Q. Hong <qhong@alum.mit.edu>
 
 ;; This file is NOT part of GNU Emacs.
 

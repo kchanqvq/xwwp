@@ -1,13 +1,6 @@
 ;;; xwwp-history.el --- history management for `xwwp' browser  -*- lexical-binding: t; -*-
 
-;; Author: K. Scarlet
-;; URL: https://github.com/canatella/xwwp
-;; Created: 2020-08-20
-;; Keywords: convenience
-;; Version: 0.1
-;; Package-Requires: ((emacs "26.1") (xwwp "0.1") (ctable "0.1.2"))
-
-;; Copyright (C) 2020 K. Scarlet <qhong@mit.edu>
+;; Copyright (C) 2020-2022 Q. Hong <qhong@alum.mit.edu>
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -46,46 +39,28 @@
   :type 'file
   :group 'xwwp-history)
 
-(cl-defstruct xwwp-history-item url title last-time (visit-count 1)
-              display-cache completion-item)
+(cl-defstruct xwwp-history-item url title last-time (visit-count 1))
 
-(defvar xwwp-history-table nil)
-(defvar xwwp-history-completion-list nil)
-(defvar xwwp-history-visualization-list nil)
-(defvar xwwp-history-ctable-component nil)
+(defvar xwwp-history-table nil "A hashtable that maps URL to `xwwp-history-item'")
 (defun xwwp-history-item-completion-text (item)
+  "Format string used for completion for ITEM."
   (let* ((title (xwwp-history-item-title item))
          (url (xwwp-history-item-url item))
          (text (concat title " (" url ")")))
     (put-text-property (+ 2 (length title)) (1- (length text)) 'face 'link text)
     text))
 (defun xwwp-history-add-item (item)
-  ""
+  "Add ITEM to `xwwp-history-table'.
+
+ITEM should be a `xwwp-history-item'."
   (let* ((url (xwwp-history-item-url item))
          (existed (gethash url xwwp-history-table)))
     (when existed
-      (setq item existed)
-      (incf (xwwp-history-item-visit-count existed)))
+      (cl-incf (xwwp-history-item-visit-count item)
+            (xwwp-history-item-visit-count existed)))
     (puthash url item xwwp-history-table)
-    (when existed
-      (setq xwwp-history-visualization-list
-            (delq (xwwp-history-item-display-cache existed)
-                  xwwp-history-visualization-list)))
-    (setf (xwwp-history-item-display-cache item)
-          (list (xwwp-history-item-title item)
-                (format-time-string "%c" (xwwp-history-item-last-time item))
-                (xwwp-history-item-url item)
-                (xwwp-history-item-visit-count item)))
-    (push (xwwp-history-item-display-cache item) xwwp-history-visualization-list)
-    (when xwwp-history-ctable-component
-      (setf (ctbl:model-data (ctbl:component-model xwwp-history-ctable-component))
-            xwwp-history-visualization-list)
-      (ctbl:cp-update xwwp-history-ctable-component))
-    (unless existed
-      (let ((text (xwwp-history-item-completion-text item)))
-        (let ((completion-item (cons text url)))
-          (setf (xwwp-history-item-completion-item item) completion-item)
-          (push completion-item xwwp-history-completion-list))))))
+    (when (and xwwp-history-buffer (buffer-live-p xwwp-history-buffer))
+      (xwwp-history-refresh))))
 (defun xwwp-history-item-serialize (item)
   (list (xwwp-history-item-url item)
         (xwwp-history-item-title item)
@@ -109,12 +84,7 @@
 (defun xwwp-history-initialize ()
   "Setup required data structure and load history from XWWP-HISTORY-FILENAME."
   (setq xwwp-history-table (make-hash-table :test 'equal))
-  (setq xwwp-history-completion-list nil)
-  (setq xwwp-history-visualization-list nil)
-  (setq xwwp-history-ctable-component nil)
-  (xwwp-history-load)
-  nil)
-(xwwp-history-initialize)
+  (xwwp-history-load))
 (defun xwwp-history-commit ()
   "Compact history log in XWWP-HISTORY-FILENAME."
   (interactive)
@@ -147,8 +117,6 @@
     (let ((existed (gethash url xwwp-history-table)))
       (unless (equal (xwwp-history-item-title existed) title)
         (setf (xwwp-history-item-title existed) title)
-        (setf (car (xwwp-history-item-display-cache existed)) title)
-        (setf (car (xwwp-history-item-completion-item existed)) (xwwp-history-item-completion-text existed))
         (when xwwp-history-ctable-component
           (ctbl:cp-update xwwp-history-ctable-component))))))
 (advice-add 'xwidget-webkit-callback :after #'xwwp-history-xwidget-event-callback)
@@ -158,32 +126,44 @@
 (defgroup xwwp-history nil
   "`xwidget-webkit' history customizations."
   :group 'xwwp)
-(defvar xwwp-history-key-map (make-sparse-keymap))
-(define-key xwwp-history-key-map (kbd "RET")
-  (lambda ()
-    (interactive)
-    (ctbl:navi-on-click)
-    (xwwp
-     (caddr
-      (ctbl:cp-get-selected-data-row xwwp-history-ctable-component)))))
-(defun xwwp-history-show ()
-  ""
+(defvar xwwp-history-buffer nil)
+(define-derived-mode xwwp-history-mode tabulated-list-mode
+  "XWWP History"
+  (setq tabulated-list-format [("Title" 40 t)
+                               ("URL" 40 t)
+                               ("Access Date" 21 t)
+                               ("Visit Count" 7 t)]))
+(defvar xwwp-history-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") #'xwwp-history-goto)
+    (define-key map [mouse-1] #'xwwp-history-goto)
+    map))
+(defun xwwp-history-goto ()
+  "Goto XWWP history item at point."
   (interactive)
-  (unless xwwp-history-ctable-component
-    (let* ((column-model
-            (list (make-ctbl:cmodel :title "Title" :align 'left)
-                  (make-ctbl:cmodel :title "Access Date" :align 'left)
-                  (make-ctbl:cmodel :title "URL" :align 'left)
-                  (make-ctbl:cmodel :title "Visit Count" :align 'right)))
-           (model (make-ctbl:model
-                   :column-model column-model
-                   :data xwwp-history-visualization-list))
-           (component (ctbl:create-table-component-buffer
-                       :model model
-                       :buffer (get-buffer-create "*XWWP history*")
-                       :custom-map xwwp-history-key-map)))
-      (setq xwwp-history-ctable-component component)))
-  (pop-to-buffer (ctbl:cp-get-buffer xwwp-history-ctable-component))
-  (rename-buffer "*XWWP history*"))
+  (xwwp (tabulated-list-get-id)))
+(defun xwwp-history-refresh ()
+  (with-current-buffer xwwp-history-buffer
+    (xwwp-history-mode)
+    (setq tabulated-list-entries nil)
+    (maphash (lambda (k item)
+               (push (list k (vector (xwwp-history-item-title item)
+                                     (xwwp-history-item-url item)
+                                     (format-time-string "%Y-%m-%d %a %H:%M" (xwwp-history-item-last-time item))
+                                     (number-to-string (xwwp-history-item-visit-count item))))
+                     tabulated-list-entries))
+             xwwp-history-table)
+    (tabulated-list-init-header)
+    (tabulated-list-print)))
+(defun xwwp-history-show ()
+  "Show XWWP history buffer."
+  (interactive)
+  (unless (and xwwp-history-buffer (buffer-live-p xwwp-history-buffer))
+    (setq xwwp-history-buffer (get-buffer-create "*XWWP history*")))
+  (xwwp-history-refresh)
+  (pop-to-buffer xwwp-history-buffer))
+
+(xwwp-history-initialize)
+
 (provide 'xwwp-history)
 ;;; xwwp-history.el ends here
